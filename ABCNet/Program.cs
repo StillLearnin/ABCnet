@@ -10,17 +10,18 @@ namespace ABCNet
     class Program
     {
         const string Server = "http://localhost:3998";
-        const string User = "conrad";
-        const string Password = "P@ssw0rd";
-
+        const string User = "test";
+        const string Password = "pass123@Test";
+        static string baseUrl;
         static void Main(string[] args)
         {
-            var url = Connect(Server, User, Password);
-            LoadScreen(url, "C");
-            LoadRecord(url, "TES");
+            baseUrl = Connect(Server, User, Password);
+
+            LoadScreen("C");
+            LoadRecord("HERMER");
 
             while (true)
-                Poll(url);
+                Poll();
         }
 
         static string Connect(string server, string userId, string password)
@@ -30,7 +31,11 @@ namespace ABCNet
 
             using (var w = new WebClient())
             {
+                LogIt(Environment.NewLine + "Connect Request");
+                LogIt("URL: " + url);
+                LogIt("Post Data: " + req);
                 var data = w.UploadString(url, req);
+                LogIt("Response: " + data + Environment.NewLine);
 
                 var r = JObject.Parse(data);
                 var user = r.Value<int>("user");
@@ -41,46 +46,76 @@ namespace ABCNet
             }
         }
 
-        static void LoadScreen(string url, string screen)
+        static void LoadScreen(string screen)
         {
-            url += "/input";
             var req = JsonConvert.SerializeObject(new { action = "loadScreen", id = screen });
-
-            using (var w = new WebClient())
-                w.UploadString(url, req);
+            PostRequest("Load Screen", req);
         }
 
-        static void LoadRecord(string url, string id)
+        static void LoadRecord(string id)
         {
-            url += "/input";
             var req = JsonConvert.SerializeObject(new { action = "load", id = id });
-            using (var w = new WebClient())
-                w.UploadString(url, req);
+            PostRequest("Load Record", req);
         }
 
-        static void Poll(string url)
+        private static void PostRequest(string action, string req)
         {
-            url += "/poll";
-            using (var w = new WebClient())
+            try
             {
-                var content = w.UploadString(url, "");
-                if (content.Length == 0)
+                string url = baseUrl + "/input";
+                using (var w = new WebClient())
                 {
-                    Console.WriteLine("Empty response");
-                    return;
+                    LogIt(action);
+                    LogIt("URL: " + url);
+                    LogIt("Post Data: " + req + Environment.NewLine);
+                    w.UploadString(url, req);
                 }
 
-                var resp = JArray.Parse(content);
-                foreach (var item in resp)
+            }
+            catch (Exception e)
+            {
+                LogIt("Error: " + e.Message);
+            }
+        }
+
+        static void Poll()
+        {
+            try
+            {
+                var url = baseUrl + "/poll";
+                using (var w = new WebClient())
                 {
-                    var obj = (JObject)item;
-                    var type = obj.Value<string>("type");
-                    var data = obj.Value<JToken>("data");
-                    if (type == "command")
-                        Command(obj.Value<string>("command"), data);
-                    else if (type == "data")
-                        Data((JObject)data);
+                    LogIt("Poll for Response");
+                    LogIt("URL: " + url);
+
+                    var content = w.UploadString(url, "");
+
+                    if (content.Length == 0)
+                    {
+                        LogIt("Response: Empty response" + Environment.NewLine);
+                        Console.WriteLine("Empty response");
+                        return;
+                    }
+
+                    LogIt("Response: " + JToken.Parse(content).ToString() + Environment.NewLine);
+
+                    var resp = JArray.Parse(content);
+                    foreach (var item in resp)
+                    {
+                        var obj = (JObject)item;
+                        var type = obj.Value<string>("type");
+                        var data = obj.Value<JToken>("data");
+                        if (type == "command")
+                            Command(obj.Value<string>("command"), data);
+                        else if (type == "data")
+                            Data((JObject)data);
+                    }
                 }
+
+            }
+            catch (Exception e)
+            {
+                LogIt("Error: " + e.Message);
             }
         }
 
@@ -104,6 +139,14 @@ namespace ABCNet
                 var customerId = header.Value<string>("Id");
                 var customerName = header.Value<string>("Name");
                 Console.WriteLine("Name for {0}: {1}", customerId, customerName);
+            }
+        }
+
+        static void LogIt(string data)
+        {
+            using (StreamWriter sw = File.AppendText("ABCnetLog.txt"))
+            {
+                sw.WriteLine(data);
             }
         }
     }
